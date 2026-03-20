@@ -21,7 +21,7 @@
   #include <sys/mman.h>
   #include <unistd.h>
   #include <dlfcn.h>
-  #include <link.h>
+  #include <stdio.h>
 #endif
 
 // #notob
@@ -131,36 +131,62 @@ static ModuleInfo_t GetEngineModule()
 
 #else
 
-static ModuleInfo_t g_engineInfo;
-
-static int dl_iterate_callback(struct dl_phdr_info *info, size_t, void *)
+static ModuleInfo_t GetEngineModuleFromMaps(const char *needle)
 {
-    if (info->dlpi_name && strstr(info->dlpi_name, "engine.so"))
+    ModuleInfo_t result;
+    result.base = NULL;
+    result.size = 0;
+
+    FILE *fp = fopen("/proc/self/maps", "r");
+    if (!fp)
+        return result;
+
+    uintptr_t lo = (uintptr_t)-1, hi = 0;
+    char line[512];
+    bool found = false;
+
+    while (fgets(line, sizeof(line), fp))
     {
-        uintptr_t lo = (uintptr_t)-1, hi = 0;
-        for (int i = 0; i < info->dlpi_phnum; ++i)
+        if (!strstr(line, needle))
+            continue;
+
+        found = true;
+        uintptr_t start, end;
+        if (sscanf(line, "%lx-%lx", &start, &end) == 2)
         {
-            if (info->dlpi_phdr[i].p_type == PT_LOAD)
-            {
-                uintptr_t segStart = info->dlpi_addr + info->dlpi_phdr[i].p_vaddr;
-                uintptr_t segEnd   = segStart + info->dlpi_phdr[i].p_memsz;
-                if (segStart < lo) lo = segStart;
-                if (segEnd   > hi) hi = segEnd;
-            }
+            if (start < lo) lo = start;
+            if (end   > hi) hi = end;
         }
-        g_engineInfo.base = (void *)lo;
-        g_engineInfo.size = (size_t)(hi - lo);
-        return 1;
     }
-    return 0;
+    fclose(fp);
+
+    if (found && lo < hi)
+    {
+        result.base = (void *)lo;
+        result.size = (size_t)(hi - lo);
+    }
+    return result;
 }
 
 static ModuleInfo_t GetEngineModule()
 {
-    g_engineInfo.base = NULL;
-    g_engineInfo.size = 0;
-    dl_iterate_phdr(dl_iterate_callback, NULL);
-    return g_engineInfo;
+    static const char *names[] = {
+        "/engine.so",
+        "/engine_srv.so",
+        NULL
+    };
+
+    for (int i = 0; names[i]; i++)
+    {
+        ModuleInfo_t info = GetEngineModuleFromMaps(names[i]);
+        if (info.base && info.size)
+            return info;
+    }
+
+    ModuleInfo_t empty;
+    empty.base = NULL;
+    empty.size = 0;
+    return empty;
 }
 
 #endif
