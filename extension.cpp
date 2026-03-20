@@ -27,7 +27,7 @@
 CCSGOAppIDKickMsg g_AppIDKickMsg;
 SMEXT_LINK(&g_AppIDKickMsg);
 
-// ─── Signatures for the appid switch jump table ───
+// Signatures for the appid switch jump table
 
 // Linux:   FF 24 85 ?? ?? ?? ?? 8D B4 26 ?? ?? ?? ?? 31 F6
 static const unsigned char g_sigLinux[]  = { 0xFF, 0x24, 0x85, 0x00, 0x00, 0x00, 0x00, 0x8D, 0xB4, 0x26, 0x00, 0x00, 0x00, 0x00, 0x31, 0xF6 };
@@ -39,7 +39,7 @@ static const unsigned char g_sigWin[]    = { 0xFF, 0x24, 0x85, 0x00, 0x00, 0x00,
 static const unsigned char g_maskWin[]   = { 0xFF, 0xFF, 0xFF, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x00, 0xFF };
 static const size_t g_sigWinLen = sizeof(g_sigWin);
 
-// ─── Patch state ───
+// Patch state 
 
 static bool      g_patched         = false;
 static uint32_t  g_origMsgPtr      = 0;       // original appid-reject string pointer
@@ -49,7 +49,7 @@ static bool      g_steamValPatched    = false;
 static uint32_t  g_origSteamValPtr    = 0;       // original "STEAM validation rejected" pointer
 static uint32_t *g_steamValPatchAddr  = NULL;     // steam-val code patch location
 
-// ─── Kick message ───
+// Kick message 
 
 #define KICK_MSG_MAX 512
 static char g_kickMsgBuffer[KICK_MSG_MAX];
@@ -62,7 +62,7 @@ static const char *DEFAULT_KICK_MSG =
 
 #define CONFIG_FILE "configs/csgo_appid_kickmsg.txt"
 
-// ─── Helpers ───
+//  Helpers 
 
 static bool SetMemoryWritable(void *addr, size_t len)
 {
@@ -304,7 +304,7 @@ static uint32_t *FindAddrRef(void *base, size_t len, uint32_t targetAddr)
     return NULL;
 }
 
-// ─── Config file ───
+//  Config file 
 
 static void LoadKickMessage()
 {
@@ -347,7 +347,7 @@ static void LoadKickMessage()
     }
 }
 
-// ─── Root console command: "sm appid" ───
+//  Root console command: "sm appid" 
 
 void CCSGOAppIDKickMsg::OnRootConsoleCommand(const char *cmdname, const ICommandArgs *args)
 {
@@ -371,7 +371,7 @@ void CCSGOAppIDKickMsg::OnRootConsoleCommand(const char *cmdname, const ICommand
     rootconsole->DrawGenericOption("reload", "Reload kick message from config file");
 }
 
-// ─── SDK callbacks ───
+//  SDK callbacks 
 
 bool CCSGOAppIDKickMsg::SDK_OnLoad(char *error, size_t maxlength, bool late)
 {
@@ -446,7 +446,7 @@ bool CCSGOAppIDKickMsg::SDK_OnLoad(char *error, size_t maxlength, bool late)
 
     LogMsg("[APPID] appid-reject kick message patched");
 
-    // ─── Patch 2: "STEAM validation rejected" message ───
+    //  Patch 2: "STEAM validation rejected" message 
     void *steamValStr = FindStringInModule(eng.base, eng.size, "STEAM validation rejected\n");
     if (steamValStr)
     {
