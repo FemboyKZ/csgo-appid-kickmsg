@@ -20,8 +20,7 @@
 #else
   #include <sys/mman.h>
   #include <unistd.h>
-  #include <dlfcn.h>
-  #include <stdio.h>
+  #include <fcntl.h>
 #endif
 
 // #notob
@@ -131,34 +130,70 @@ static ModuleInfo_t GetEngineModule()
 
 #else
 
+static uintptr_t ParseHex(const char *s, const char **out)
+{
+    uintptr_t val = 0;
+    while (*s)
+    {
+        char c = *s;
+        if (c >= '0' && c <= '9')      val = (val << 4) | (c - '0');
+        else if (c >= 'a' && c <= 'f') val = (val << 4) | (c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') val = (val << 4) | (c - 'A' + 10);
+        else break;
+        s++;
+    }
+    if (out) *out = s;
+    return val;
+}
+
 static ModuleInfo_t GetEngineModuleFromMaps(const char *needle)
 {
     ModuleInfo_t result;
     result.base = NULL;
     result.size = 0;
 
-    FILE *fp = fopen("/proc/self/maps", "r");
-    if (!fp)
+    int fd = open("/proc/self/maps", O_RDONLY);
+    if (fd < 0)
         return result;
 
     uintptr_t lo = (uintptr_t)-1, hi = 0;
-    char line[512];
     bool found = false;
 
-    while (fgets(line, sizeof(line), fp))
-    {
-        if (!strstr(line, needle))
-            continue;
+    // Read in chunks and process line by line
+    char buf[4096];
+    char line[512];
+    int linePos = 0;
+    ssize_t n;
 
-        found = true;
-        uintptr_t start, end;
-        if (sscanf(line, "%lx-%lx", &start, &end) == 2)
+    while ((n = read(fd, buf, sizeof(buf))) > 0)
+    {
+        for (ssize_t i = 0; i < n; i++)
         {
-            if (start < lo) lo = start;
-            if (end   > hi) hi = end;
+            if (buf[i] == '\n' || linePos >= (int)sizeof(line) - 1)
+            {
+                line[linePos] = '\0';
+                if (strstr(line, needle))
+                {
+                    found = true;
+                    const char *p = line;
+                    uintptr_t start = ParseHex(p, &p);
+                    if (*p == '-')
+                    {
+                        p++;
+                        uintptr_t end = ParseHex(p, &p);
+                        if (start < lo) lo = start;
+                        if (end   > hi) hi = end;
+                    }
+                }
+                linePos = 0;
+            }
+            else
+            {
+                line[linePos++] = buf[i];
+            }
         }
     }
-    fclose(fp);
+    close(fd);
 
     if (found && lo < hi)
     {
@@ -339,21 +374,32 @@ static void LoadKickMessage()
     char path[PLATFORM_MAX_PATH];
     smutils->BuildPath(Path_SM, path, sizeof(path), CONFIG_FILE);
 
+#ifdef _WIN32
     FILE *fp = fopen(path, "r");
     if (fp)
     {
         size_t n = fread(g_kickMsgBuffer, 1, KICK_MSG_MAX - 1, fp);
         g_kickMsgBuffer[n] = '\0';
         fclose(fp);
+#else
+    int fd = open(path, O_RDONLY);
+    if (fd >= 0)
+    {
+        ssize_t n = read(fd, g_kickMsgBuffer, KICK_MSG_MAX - 1);
+        if (n < 0) n = 0;
+        g_kickMsgBuffer[n] = '\0';
+        close(fd);
+#endif
 
         // Trim trailing whitespace
-        while (n > 0 && (g_kickMsgBuffer[n-1] == '\n' || g_kickMsgBuffer[n-1] == '\r' ||
-               g_kickMsgBuffer[n-1] == ' '))
+        size_t len = strlen(g_kickMsgBuffer);
+        while (len > 0 && (g_kickMsgBuffer[len-1] == '\n' || g_kickMsgBuffer[len-1] == '\r' ||
+               g_kickMsgBuffer[len-1] == ' '))
         {
-            g_kickMsgBuffer[--n] = '\0';
+            g_kickMsgBuffer[--len] = '\0';
         }
 
-        LogMsg("[APPID] loaded kick message from config (%d chars)", (int)n);
+        LogMsg("[APPID] loaded kick message from config (%d chars)", (int)len);
     }
     else
     {
@@ -361,11 +407,21 @@ static void LoadKickMessage()
         strncpy(g_kickMsgBuffer, DEFAULT_KICK_MSG, KICK_MSG_MAX - 1);
         g_kickMsgBuffer[KICK_MSG_MAX - 1] = '\0';
 
-        fp = fopen(path, "w");
-        if (fp)
+#ifdef _WIN32
+        FILE *wfp = fopen(path, "w");
+        if (wfp)
         {
-            fprintf(fp, "%s\n", DEFAULT_KICK_MSG);
-            fclose(fp);
+            fprintf(wfp, "%s\n", DEFAULT_KICK_MSG);
+            fclose(wfp);
+#else
+        int wfd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+        if (wfd >= 0)
+        {
+            const char *msg = DEFAULT_KICK_MSG;
+            write(wfd, msg, strlen(msg));
+            write(wfd, "\n", 1);
+            close(wfd);
+#endif
             LogMsg("[APPID] created default config at %s", path);
         }
         else
