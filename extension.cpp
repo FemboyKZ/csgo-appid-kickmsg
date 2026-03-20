@@ -24,6 +24,8 @@
   #include <link.h>
 #endif
 
+// #notob
+
 CCSGOAppIDKickMsg g_AppIDKickMsg;
 SMEXT_LINK(&g_AppIDKickMsg);
 
