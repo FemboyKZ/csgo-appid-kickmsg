@@ -133,7 +133,7 @@ static ModuleInfo_t g_engineInfo;
 
 static int dl_iterate_callback(struct dl_phdr_info *info, size_t, void *)
 {
-    if (info->dlpi_name && strstr(info->dlpi_name, "engine_srv.so"))
+    if (info->dlpi_name && strstr(info->dlpi_name, "engine.so"))
     {
         uintptr_t lo = (uintptr_t)-1, hi = 0;
         for (int i = 0; i < info->dlpi_phnum; ++i)
